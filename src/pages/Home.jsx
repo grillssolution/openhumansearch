@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import SearchBar from '../components/SearchBar';
 import { useTheme } from '../components/ThemeToggle';
 
-// Fetch trending topics from HN and GitHub
+// Fetch trending topics from HN and Reddit (diverse world topics)
 async function fetchTrending() {
   const cached = sessionStorage.getItem('hs_trending');
   if (cached) {
@@ -14,59 +14,78 @@ async function fetchTrending() {
 
   const topics = [];
 
-  // HN top stories — get titles of top 6 stories
+  // HN top stories — get titles of top 3 stories
   try {
     const res = await fetch('https://hacker-news.firebaseio.com/v0/topstories.json');
     if (!res.ok) throw new Error('HN Top Stories response not okay');
     const ids = await res.json();
-    const top6 = ids.slice(0, 8);
+    const top5 = ids.slice(0, 5);
     const stories = await Promise.all(
-      top6.map((id) =>
+      top5.map((id) =>
         fetch(`https://hacker-news.firebaseio.com/v0/item/${id}.json`).then((r) => r.json())
       )
     );
+    let hnCount = 0;
     for (const s of stories) {
-      if (s?.title && s.title.length < 60) {
+      if (hnCount >= 3) break;
+      if (s?.title && s.title.length < 55) {
         topics.push({ title: s.title, source: 'hackernews', points: s.score || 0 });
+        hnCount++;
       }
     }
   } catch (err) {
     console.warn('Failed to fetch HN trending:', err);
   }
 
-  // GitHub trending — top repos today
+  // Wikipedia most-read articles — diverse world topics (CORS-friendly)
   try {
+    const yesterday = new Date(Date.now() - 86400000);
+    const yyyy = yesterday.getFullYear();
+    const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
+    const dd = String(yesterday.getDate()).padStart(2, '0');
     const res = await fetch(
-      'https://api.github.com/search/repositories?q=created:>' +
-        new Date(Date.now() - 7 * 86400000).toISOString().slice(0, 10) +
-        '&sort=stars&order=desc&per_page=4',
-      { headers: { Accept: 'application/vnd.github.v3+json' } }
+      `https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia/all-access/${yyyy}/${mm}/${dd}`
     );
-    if (!res.ok) throw new Error('GitHub Trending response not okay');
+    if (!res.ok) throw new Error('Wikipedia Most Read response not okay');
     const data = await res.json();
-    for (const repo of (data?.items || []).slice(0, 4)) {
-      if (repo?.full_name) {
-        topics.push({ title: repo.full_name, source: 'github', points: repo.stargazers_count || 0 });
-      }
+    const articles = (data?.items?.[0]?.articles || [])
+      .filter((a) =>
+        a.article !== 'Main_Page' &&
+        !a.article.startsWith('Special:') &&
+        !a.article.startsWith('Wikipedia:') &&
+        !a.article.startsWith('Portal:') &&
+        a.article.length < 60
+      )
+      .slice(0, 3);
+    for (const a of articles) {
+      topics.push({
+        title: a.article.replace(/_/g, ' '),
+        source: 'wikipedia',
+        points: a.views || 0,
+      });
     }
   } catch (err) {
-    console.warn('Failed to fetch GitHub trending:', err);
+    console.warn('Failed to fetch Wikipedia trending:', err);
   }
+
+  // Cap at 6 total
+  const finalTopics = topics.slice(0, 6);
 
   // Cache in sessionStorage
   try {
-    sessionStorage.setItem('hs_trending', JSON.stringify({ data: topics, ts: Date.now() }));
+    sessionStorage.setItem('hs_trending', JSON.stringify({ data: finalTopics, ts: Date.now() }));
   } catch (err) {
     console.warn('Failed to cache trending data:', err);
   }
 
-  return topics;
+  return finalTopics;
 }
 
 const SOURCE_ICONS = {
   hackernews: '🟠',
-  github: '💻',
+  wikipedia: '📖',
   reddit: '🔴',
+  github: '💻',
 };
 
 export default function Home() {
@@ -149,7 +168,7 @@ export default function Home() {
                   key={i}
                   className={`trending-chip ${t.source}`}
                   onClick={() => handleSearch(t.title)}
-                  title={`${t.points?.toLocaleString()} ${t.source === 'github' ? 'stars' : 'points'} · ${t.source}`}
+                  title={`${t.points?.toLocaleString()} ${t.source === 'github' ? 'stars' : 'points'}${t.subreddit ? ` · r/${t.subreddit}` : ''} · ${t.source}`}
                 >
                   <span className="trending-chip-icon">{SOURCE_ICONS[t.source] || '📰'}</span>
                   <span className="trending-chip-text">{t.title}</span>
