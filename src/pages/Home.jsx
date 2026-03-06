@@ -38,16 +38,23 @@ async function fetchTrending() {
   }
 
   // Wikipedia most-read articles — diverse world topics (CORS-friendly)
+  // Data has a 1-2 day lag, so try yesterday, then 2 and 3 days ago
   try {
-    const yesterday = new Date(Date.now() - 86400000);
-    const yyyy = yesterday.getFullYear();
-    const mm = String(yesterday.getMonth() + 1).padStart(2, '0');
-    const dd = String(yesterday.getDate()).padStart(2, '0');
-    const res = await fetch(
-      `https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia/all-access/${yyyy}/${mm}/${dd}`
-    );
-    if (!res.ok) throw new Error('Wikipedia Most Read response not okay');
-    const data = await res.json();
+    let data = null;
+    for (let daysAgo = 1; daysAgo <= 3; daysAgo++) {
+      const date = new Date(Date.now() - daysAgo * 86400000);
+      const yyyy = date.getFullYear();
+      const mm = String(date.getMonth() + 1).padStart(2, '0');
+      const dd = String(date.getDate()).padStart(2, '0');
+      const res = await fetch(
+        `https://wikimedia.org/api/rest_v1/metrics/pageviews/top/en.wikipedia/all-access/${yyyy}/${mm}/${dd}`
+      );
+      if (res.ok) {
+        data = await res.json();
+        break;
+      }
+    }
+    if (!data) throw new Error('Wikipedia Most Read not available');
     const articles = (data?.items?.[0]?.articles || [])
       .filter((a) =>
         a.article !== 'Main_Page' &&
