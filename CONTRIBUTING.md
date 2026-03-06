@@ -3,9 +3,9 @@
 First off, thank you for considering contributing to OpenHumanSearch! 
 
 ## How the App Works
-OpenHumanSearch is a pure client-side React SPA. It has no backend. 
+OpenHumanSearch operates primarily as a client-side React SPA. When configured and deployed on Vercel, it uses serverless proxy functions (e.g. `api/reddit.js`) to bypass strict unauthenticated API rate limits, but naturally falls back to direct browser API fetching otherwise. 
 When a user types a query, `src/pages/SearchResults.jsx` calls `searchAll()` from `src/services/searchApi.js`. 
-That function triggers parallel `fetch` requests to the public APIs of all enabled sources, normalizes their results, scores them for relevance, and interleaves them.
+That function triggers parallel `fetch` requests (either directly or via the proxy), normalizes their results, scores them for relevance, and interleaves them.
 
 ## Adding a New Search Source
 
@@ -53,4 +53,4 @@ Want to add a new site (e.g., DEV.to, Medium, Arxiv)? It's incredibly straightfo
 
 - We use ESLint. Please run `npm run lint` before opening a pull request.
 - Keep components small and functional.
-- Ensure the app maintains its zero-dependency backend philosophy unless proposing a major architectural proxy layer.
+- Ensure the app maintains a minimal backend footprint (only using lightweight serverless API proxies when necessary for higher rate limits).
