@@ -20,6 +20,21 @@ function fetchWithTimeout(url, options = {}, timeoutMs = 5000) {
     .finally(() => clearTimeout(timer));
 }
 
+// ── Retry helper for rate-limited endpoints (HTTP 429) ──────
+async function fetchWithRetry(url, options = {}, { timeoutMs = 5000, maxRetries = 3, baseDelay = 1000 } = {}) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const res = await fetchWithTimeout(url, options, timeoutMs);
+    if (res.status === 429 && attempt < maxRetries) {
+      const retryAfter = res.headers.get('Retry-After');
+      const delay = retryAfter ? parseInt(retryAfter, 10) * 1000 : baseDelay * Math.pow(2, attempt);
+      console.warn(`[Rate limited] Retrying in ${delay}ms (attempt ${attempt + 1}/${maxRetries})`);
+      await new Promise((r) => setTimeout(r, delay));
+      continue;
+    }
+    return res;
+  }
+}
+
 // ── Relevance scoring ───────────────────────────────────────
 
 function tokenize(text) {
@@ -135,18 +150,39 @@ function computeCompositeScore(query, result) {
 
 // ── Source-specific search functions ─────────────────────────
 
+const REDDIT_HEADERS = {
+  'Accept': 'application/json',
+  'User-Agent': 'OpenHumanSearch/1.0 (open-source search engine)',
+};
+
+// Detect if we're running on Vercel (production) to use the proxy
+function isDeployed() {
+  try {
+    return typeof window !== 'undefined' &&
+      !['localhost', '127.0.0.1'].includes(window.location.hostname);
+  } catch {
+    return false;
+  }
+}
+
+async function fetchReddit(queryString) {
+  if (isDeployed()) {
+    // Use Vercel serverless proxy — proper User-Agent, ~60 req/min
+    return fetchWithRetry(`/api/reddit?${queryString}`).then(r => r.json());
+  }
+  // Local dev — direct call with client-side retry
+  return fetchWithRetry(
+    `https://www.reddit.com/search.json?${queryString}`,
+    { headers: REDDIT_HEADERS }
+  ).then(r => r.json());
+}
+
 async function searchReddit(query) {
   // Fire phrase and broad queries in parallel for speed
   const phraseQuery = `"${query}"`;
   const [phraseRes, broadRes] = await Promise.allSettled([
-    fetchWithTimeout(
-      `https://www.reddit.com/search.json?q=${encodeURIComponent(phraseQuery)}&limit=10&sort=relevance&t=all`,
-      { headers: { 'Accept': 'application/json' } }
-    ).then(r => r.json()),
-    fetchWithTimeout(
-      `https://www.reddit.com/search.json?q=${encodeURIComponent(query)}&limit=10&sort=relevance&t=all`,
-      { headers: { 'Accept': 'application/json' } }
-    ).then(r => r.json()),
+    fetchReddit(`q=${encodeURIComponent(phraseQuery)}&limit=10&sort=relevance&t=all`),
+    fetchReddit(`q=${encodeURIComponent(query)}&limit=10&sort=relevance&t=all`),
   ]);
 
   const phraseItems = phraseRes.status === 'fulfilled' ? (phraseRes.value?.data?.children || []) : [];
@@ -200,10 +236,18 @@ async function searchWikipedia(query) {
 }
 
 async function searchGitHub(query) {
-  const res = await fetchWithTimeout(
-    `https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&sort=stars&per_page=10`,
-    { headers: { Accept: 'application/vnd.github.v3+json' } }
-  );
+  let res;
+  if (isDeployed()) {
+    // Vercel serverless proxy — injects secure token server-side, 30 req/min
+    res = await fetchWithRetry(`/api/github?q=${encodeURIComponent(query)}`);
+  } else {
+    // Local dev — unauthenticated direct call, 60 req/hour limit per IP
+    res = await fetchWithRetry(
+      `https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&sort=stars&per_page=10`,
+      { headers: { Accept: 'application/vnd.github.v3+json' } }
+    );
+  }
+  
   const data = await res.json();
   return (data?.items || []).map((item) => ({
     source: 'github',
