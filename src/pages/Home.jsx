@@ -193,6 +193,9 @@ export default function Home() {
       <footer className="home-footer">
         <p>Searching only trusted, human-generated sources</p>
         <p className="footer-sub">Press <kbd>/</kbd> to search from anywhere</p>
+        <p className="footer-sub" style={{ marginTop: '12px' }}>
+          Developed by <a href="https://grillstech.in/" target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-primary)', textDecoration: 'none', fontWeight: 500 }}>Grills Tech</a>
+        </p>
       </footer>
     </div>
   );

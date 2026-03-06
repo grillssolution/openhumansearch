@@ -52,15 +52,18 @@ Because OpenHumanSearch is a pure client-side SPA, you can run it locally with z
 4. Open your browser and navigate to `http://localhost:5173`.
 
 ### Environment Variables & Rate Limits
-By default, the app searches public APIs safely without authentication. However, some APIs (specifically **GitHub**) have strict unauthenticated rate limits (60 requests/hour/IP).
 
-To increase your personal rate limits during development, copy `.env.example` to `.env.local` and add your API keys:
+By default, the app searches public APIs safely without authentication. During local development (`npm run dev`), all searches happen directly in the browser.
 
-```bash
-cp .env.example .env.local
-```
+However, when deployed to **Vercel**, the application automatically utilizes serverless functions (`api/reddit.js` and `api/github.js`) to act as a backend proxy:
 
-*(Note: The current codebase does not yet consume these keys, but the `.env.local` file is set up for future expansion if you wish to run a proxy backend or inject keys into the headers in `src/services/searchApi.js`.)*
+1. **Reddit**: Proxies requests with a custom User-Agent, bypassing strict unauthenticated limits to give you ~60 requests/minute.
+2. **GitHub**: Securely injects a GitHub Personal Access Token on the backend, increasing the search limit from 60/hour (IP-based) to 30/minute (authenticated).
+
+To enable the authenticated GitHub proxy on Vercel:
+1. Generate a [GitHub Personal Access Token](https://github.com/settings/tokens) (read-only is fine).
+2. Go to your Vercel Project Settings > Environment Variables.
+3. Add a new variable: `GITHUB_TOKEN` (Do **not** prefix with `VITE_` to ensure it stays completely hidden from the browser).
 
 ## 🚢 Deployment
 
@@ -71,13 +74,9 @@ npm run build
 # The optimized files will be in the /dist directory
 ```
 
-It can be deployed to any static host for free:
-- [Vercel](https://vercel.com/new)
-- [Netlify](https://www.netlify.com/)
-- [Cloudflare Pages](https://pages.cloudflare.com/)
-- [GitHub Pages](https://pages.github.com/)
+It is primarily designed to be deployed on [Vercel](https://vercel.com/new) out of the box to take advantage of the serverless API proxies for higher rate limits. It includes a `vercel.json` file for proper SPA routing.
 
-> **Warning for Public Deployments:** Because the app fetches directly from the browser, a public deployment with high traffic will quickly exhaust external rate limits (like GitHub and StackOverflow). For a high-traffic production version, you will need to replace the direct frontend `fetch` calls with a backend proxy that caches responses.
+> **Note on other hosts:** You can deploy the frontend to any static host (Netlify, Cloudflare Pages, GitHub Pages), but you will lose the backend proxies. The app will automatically fall back to direct browser fetching, which means a high-traffic public deployment will quickly exhaust external IP-based rate limits (like GitHub's 60/hour limit).
 
 ## 🤝 Contributing
 
