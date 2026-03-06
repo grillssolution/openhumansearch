@@ -1,6 +1,7 @@
 // Vercel Serverless Function — Reddit Search Proxy
-// Proxies requests to Reddit's public JSON API with proper headers
-// to avoid browser User-Agent restrictions and get full rate limits (~60 req/min)
+// Proxies requests to Reddit's JSON API.
+// Reddit blocks cloud-provider IPs with bot User-Agents,
+// so we use a standard browser UA to avoid the block.
 
 export default async function handler(req, res) {
   // Only allow GET requests
@@ -14,13 +15,16 @@ export default async function handler(req, res) {
     return res.status(400).json({ error: 'Missing query parameter "q"' });
   }
 
-  const url = `https://www.reddit.com/search.json?q=${encodeURIComponent(q)}&limit=${limit}&sort=${sort}&t=${t}`;
+  // Use old.reddit.com — more lenient with server-side requests
+  const url = `https://old.reddit.com/search.json?q=${encodeURIComponent(q)}&limit=${limit}&sort=${sort}&t=${t}&raw_json=1`;
 
   try {
     const response = await fetch(url, {
       headers: {
-        'User-Agent': 'OpenHumanSearch/1.0 (open-source search engine; serverless proxy)',
-        'Accept': 'application/json',
+        // Browser-like headers to avoid Reddit's cloud-IP bot detection
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,application/json,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
       },
     });
 
@@ -35,6 +39,7 @@ export default async function handler(req, res) {
     }
 
     if (!response.ok) {
+      console.error(`[Reddit Proxy] Reddit returned ${response.status}`);
       return res.status(response.status).json({ error: `Reddit returned ${response.status}` });
     }
 
