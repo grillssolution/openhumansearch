@@ -4,9 +4,7 @@ Search the human web. Get results from Reddit, GitHub, Wikipedia, Hacker News, S
 
 No SEO spam. No ads. No algorithm. Just humans.
 
-**[Try the live demo](https://openhumansearch.io)** *(Replace with your URL)*
-
-![OpenHumanSearch Preview](public/og-image.jpg) *(Add a screenshot here)*
+**[Try the live demo](https://openhumansearch.com/)**
 
 ## ✨ Features
 
